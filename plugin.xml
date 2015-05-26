@@ -20,7 +20,7 @@
 
         <source-file src="src/android/com/dbn/plugin/DbnmBgSyncSvc.java" target-dir="src/com/dbn/plugin/dbnmBgSyncSvc" />
 
-        <config-file target="res/xml/config.xml" parent="/*">
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
             <service android:name="com.dbn.plugin.DbnmBgSyncSvc">
                 <intent-filter>
                     <action android:name="com.dbn.plugin.DbnmBgSyncSvc"/>
