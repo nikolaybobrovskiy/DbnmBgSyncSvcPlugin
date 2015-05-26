@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?><plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    id="com.dbn.plugin.dbnmBgSyncSvc"
+    version="1.0.8">
+
+    <name>DbnmBgSyncSvc</name>
+    <description>DbnmBgSyncSvc.</description>
+    <license>MIT</license>
+
+    <engines>
+        <engine name="cordova" version=">=3.0.0" />
+    </engines>
+
+    <!-- android -->
+    <platform name="android">
+
+        <js-module src="www/dbnmBgSyncSvc.js" name="DbnmBgSyncSvc">
+            <clobbers target="cordova.plugins.dbnmBgSyncSvc" />
+        </js-module>
+
+        <source-file src="src/android/com/dbn/plugin/DbnmBgSyncSvc.java" target-dir="src/com/dbn/plugin/dbnmBgSyncSvc" />
+
+        <config-file target="res/xml/config.xml" parent="/*">
+            <service android:name="com.dbn.plugin.MyService">
+                <intent-filter>
+                    <action android:name="com.dbn.plugin.MyService"/>
+                </intent-filter>
+            </service>
+        </config-file>
+
+    </platform>
+</plugin>
