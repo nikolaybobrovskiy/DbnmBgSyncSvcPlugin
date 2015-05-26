@@ -11,6 +11,8 @@
         <engine name="cordova" version=">=3.0.0" />
     </engines>
 
+    <dependency id="com.red_folder.phonegap.plugin.backgroundservice" url="https://github.com/Red-Folder/bgs-core.git"/>
+
     <!-- android -->
     <platform name="android">
 
