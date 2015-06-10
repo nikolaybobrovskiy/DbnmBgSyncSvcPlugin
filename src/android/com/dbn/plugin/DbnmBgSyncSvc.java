@@ -100,11 +100,12 @@ public class DbnmBgSyncSvc extends BackgroundService {
                 db.close();
             }
         } catch (Exception e) {
+            Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
             try {
                 result.put("exception", true);
                 result.put("exceptionMessage", e.getMessage());
             } catch (JSONException e1) {
-                e1.printStackTrace();
+                Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e1);
             }
         }
 
@@ -122,7 +123,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
             result.put("appVersion", this.appVersion);
             result.put("lang", this.lang);
         } catch (JSONException e) {
-            e.printStackTrace();
+            Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
 
         return result;
@@ -137,7 +138,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
             if (config.has("appVersion")) this.appVersion = config.getString("appVersion");
             if (config.has("lang")) this.lang = config.getString("lang");
         } catch (JSONException e) {
-            e.printStackTrace();
+            Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
 
     }
