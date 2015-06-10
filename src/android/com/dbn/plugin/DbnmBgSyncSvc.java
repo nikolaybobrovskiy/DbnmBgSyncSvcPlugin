@@ -25,7 +25,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 // TODO: Parse possible exception from Direct API.
-// TODO: Params setting from client.
 // TODO: Check connection.
 
 public class DbnmBgSyncSvc extends BackgroundService {
@@ -53,7 +52,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
             if (this.isDoingWork) {
                 return this.getLatestResult();
             }
-            
+
             this.isDoingWork = true;
         }
 
