@@ -327,7 +327,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
     }
 
     class OutgoingUpdatesResponsesProcessor implements Runnable {
-
         private SQLiteDatabase db;
         private JSONArray responses;
         private JSONObject commonResult;
