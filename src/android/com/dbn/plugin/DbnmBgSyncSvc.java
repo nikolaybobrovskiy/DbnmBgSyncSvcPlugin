@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 // TODO: Parse possible exception from Direct API.
 // TODO: Params setting from client.
+// TODO: Check connection.
 
 public class DbnmBgSyncSvc extends BackgroundService {
     private final static String TAG = com.dbn.plugin.DbnmBgSyncSvc.class.getSimpleName();
@@ -59,9 +60,24 @@ public class DbnmBgSyncSvc extends BackgroundService {
                 while (!incomingUpdatesRequests.isEmpty()) {
                     Log.d(DbnmBgSyncSvc.TAG, "Start processing of " + incomingUpdatesRequests.size() + " request(s)");
                     JSONObject directApiCallResponse = this.invokeDirectApiCall(this.createDirectApiSyncRequest(incomingUpdatesRequests, outgoingUpdatesRequests));
+
                     ArrayList<IncomingUpdatesResponse> incomingUpdatesResponses = this.getIncomingUpdatesResponsesFromDirectApiSyncResponse(incomingUpdatesRequests, directApiCallResponse);
-                    JSONArray outgoingUpdatesResponses = this.getOutgoingUpdatesResponsesFromDirectApiSyncResponse(directApiCallResponse);
                     incomingUpdatesRequests.clear();
+
+                    JSONArray outgoingUpdatesResponses = this.getOutgoingUpdatesResponsesFromDirectApiSyncResponse(directApiCallResponse);
+
+                    JSONArray errors = this.getErrorsFromDirectApiSyncResponse(directApiCallResponse);
+                    if (errors.length() > 0) {
+                        StringBuilder exceptionMessageBuilder = new StringBuilder();
+                        for (int i = 0; i < errors.length(); i++) {
+                            if (exceptionMessageBuilder.length() > 0)
+                                exceptionMessageBuilder.append(", ");
+                            exceptionMessageBuilder.append(errors.getString(i));
+                        }
+                        result.put("exception", true);
+                        result.put("exceptionMessage", exceptionMessageBuilder.toString());
+                    }
+
                     ExecutorService executorService = Executors.newCachedThreadPool();
 
                     if (outgoingUpdatesResponses.length() > 0)
@@ -147,7 +163,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
         try {
             URL url = new URL(this.directApiUrl);
             conn = (HttpURLConnection) url.openConnection();
-            //conn.setConnectTimeout(timeout);
+            conn.setConnectTimeout(5000);
             //conn.setReadTimeout(timeout);
             conn.setDoOutput(true);
             conn.setDoInput(true);
@@ -286,6 +302,14 @@ public class DbnmBgSyncSvc extends BackgroundService {
         return result;
     }
 
+    private JSONArray getErrorsFromDirectApiSyncResponse(JSONObject response) throws JSONException {
+        JSONArray result = new JSONArray();
+        if (!response.has("result")) return result;
+        if (!response.getJSONObject("result").has("errors")) return result;
+        result = response.getJSONObject("result").getJSONArray("errors");
+        return result;
+    }
+
     class IncomingUpdatesRequest {
         public int Id;
         public String TableName;
@@ -351,7 +375,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
                     this.db.endTransaction();
                     Log.d(DbnmBgSyncSvc.TAG, "Transaction ended for table SyncEntry");
                 }
-
             } catch (Exception e) {
                 Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
                 exception = true;
@@ -365,7 +388,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
                 synchronized (this.commonResultLock) {
                     this.commonResult.put("SyncEntries", processingResult);
                 }
-
             } catch (JSONException e) {
                 Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
             }
@@ -431,7 +453,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
                     Iterator fieldNames = newRecordData.keys();
                     StringBuilder fieldNamesStringBuilder = new StringBuilder();
                     StringBuilder fieldValuesStringBuilder = new StringBuilder();
-                    StringBuilder fieldSettersBuilder = new StringBuilder();
                     String idValue = "";
                     while (fieldNames.hasNext()) {
                         String fieldName = (String) fieldNames.next();
@@ -442,12 +463,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
                         if (fieldValuesStringBuilder.length() != 0)
                             fieldValuesStringBuilder.append(",");
-
-                        if (!fieldName.equals("id")) {
-                            if (fieldSettersBuilder.length() != 0)
-                                fieldSettersBuilder.append(",");
-                            fieldSettersBuilder.append(fieldName).append("=");
-                        }
 
                         Object fieldValue;
                         if (newRecordData.isNull(fieldName))
@@ -464,41 +479,34 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
                         if (fieldValue == null) {
                             fieldValuesStringBuilder.append("null");
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append("null");
                         } else if (fieldValue instanceof String) {
                             fieldValuesStringBuilder.append("'").append(fieldValue).append("'");
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append("'").append(fieldValue).append("'");
                         } else if (fieldValue instanceof Boolean) {
                             fieldValuesStringBuilder.append((Boolean) fieldValue ? 1 : 0);
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append((Boolean) fieldValue ? 1 : 0);
                         } else if (fieldValue instanceof Double) {
                             fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
                         } else if (fieldValue instanceof Float) {
                             fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
                         } else if (fieldValue instanceof Integer) {
                             fieldValuesStringBuilder.append(fieldValue);
-                            if (!fieldName.equals("id"))
-                                fieldSettersBuilder.append(fieldValue);
                         }
-
 //                            if (fieldValue != null)
 //                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is of type " + fieldValue.getClass().getCanonicalName());
 //                            else
 //                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is null");
                     }
-                    String sqlUpdate = "update " + this.response.TableName + " set " + fieldSettersBuilder.toString() + " where id = " + idValue + ";";
-                    String sqlInsert = "insert or ignore into " + this.response.TableName + " (" + fieldNamesStringBuilder.toString() + ") values (" + fieldValuesStringBuilder.toString() + ");";
-                    Log.d(DbnmBgSyncSvc.TAG, sqlUpdate);
-                    Log.d(DbnmBgSyncSvc.TAG, sqlInsert);
-                    sqlStatements.add(sqlUpdate);
-                    sqlStatements.add(sqlInsert);
+
+                    if (this.response.TableName.equals("UserProfile")) {
+                        fieldNamesStringBuilder.append(",userName,pwd,realPwd");
+                        fieldValuesStringBuilder
+                                .append(",(select userName from UserProfile where id=").append(idValue).append(")")
+                                .append(",(select pwd from UserProfile where id=").append(idValue).append(")")
+                                .append(",(select realPwd from UserProfile where id=").append(idValue).append(")");
+                    }
+
+                    String sqlInertOrReplace = "insert or replace into " + this.response.TableName + " (" + fieldNamesStringBuilder.toString() + ") values (" + fieldValuesStringBuilder.toString() + ");";
+//                    Log.d(DbnmBgSyncSvc.TAG, sqlInertOrReplace);
+                    sqlStatements.add(sqlInertOrReplace);
                 }
 
                 this.db.beginTransactionNonExclusive();
