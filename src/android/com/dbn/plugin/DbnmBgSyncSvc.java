@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 public class DbnmBgSyncSvc extends BackgroundService {
     private final static String TAG = com.dbn.plugin.DbnmBgSyncSvc.class.getSimpleName();
+    private boolean isDoingWork = false;
+    private final Object isDoingWorkLock = new Object();
     private String dbPath = "/data/data/com.dbn.DbnmKfsTest/databases/dbnm-common.db";
     private String directApiUrl = "http://192.168.100.100:54593/rpc";
     private String directApiAuth = "YmE=Bf-#1NjMxNQ==";
@@ -47,10 +49,23 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
     @Override
     protected JSONObject doWork() {
-        JSONObject result = new JSONObject();
-        final Object resultLock = new Object();
+        synchronized (this.isDoingWorkLock) {
+            if (this.isDoingWork) {
+                return this.getLatestResult();
+            }
+            
+            this.isDoingWork = true;
+        }
+
+        JSONObject currentResult = new JSONObject();
+        JSONObject finalResult = new JSONObject();
+        final Object finalResultLock = new Object();
 
         try {
+            currentResult.put("isWorking", true);
+            currentResult.put("progress", 0);
+            this.setLatestResult(currentResult);
+
             SQLiteDatabase db = SQLiteDatabase.openDatabase(this.dbPath, null, SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING);
             try {
                 ArrayList<IncomingUpdatesRequest> incomingUpdatesRequests = this.generateIncomingUpdatesRequests(db);
@@ -74,14 +89,14 @@ public class DbnmBgSyncSvc extends BackgroundService {
                                 exceptionMessageBuilder.append(", ");
                             exceptionMessageBuilder.append(errors.getString(i));
                         }
-                        result.put("exception", true);
-                        result.put("exceptionMessage", exceptionMessageBuilder.toString());
+                        finalResult.put("exception", true);
+                        finalResult.put("exceptionMessage", exceptionMessageBuilder.toString());
                     }
 
                     ExecutorService executorService = Executors.newCachedThreadPool();
 
                     if (outgoingUpdatesResponses.length() > 0)
-                        executorService.execute(new OutgoingUpdatesResponsesProcessor(db, outgoingUpdatesResponses, result, resultLock));
+                        executorService.execute(new OutgoingUpdatesResponsesProcessor(db, outgoingUpdatesResponses, finalResult, finalResultLock));
                     else
                         Log.d(DbnmBgSyncSvc.TAG, "No outgoing sync.");
                     for (IncomingUpdatesResponse rsp : incomingUpdatesResponses) {
@@ -90,7 +105,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
 //                                && !rsp.TableName.equals("RelatedGood")
 //                                && !rsp.TableName.equals("ActivityFirstMobileScreen")
 //                                && !rsp.TableName.equals("ActivityProduct")) continue;
-                        executorService.execute(new IncomingUpdatesResponseProcessor(db, rsp, result, resultLock, incomingUpdatesRequests, incomingUpdatesRequestsLock));
+                        executorService.execute(new IncomingUpdatesResponseProcessor(db, rsp, finalResult, finalResultLock, incomingUpdatesRequests, incomingUpdatesRequestsLock));
                     }
                     executorService.shutdown();
                     executorService.awaitTermination(30, TimeUnit.MINUTES);
@@ -102,14 +117,18 @@ public class DbnmBgSyncSvc extends BackgroundService {
         } catch (Exception e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
             try {
-                result.put("exception", true);
-                result.put("exceptionMessage", e.getMessage());
+                finalResult.put("exception", true);
+                finalResult.put("exceptionMessage", e.getMessage());
             } catch (JSONException e1) {
                 Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e1);
             }
+        } finally {
+            synchronized (this.isDoingWorkLock) {
+                this.isDoingWork = false;
+            }
         }
 
-        return result;
+        return finalResult;
     }
 
     @Override
