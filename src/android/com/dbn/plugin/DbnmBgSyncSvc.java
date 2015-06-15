@@ -48,6 +48,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
     protected JSONObject doWork() {
         synchronized (this.isDoingWorkLock) {
             if (this.isDoingWork) {
+                Log.d(DbnmBgSyncSvc.TAG, "Currently is RUNNING. So return simply return latest result.");
                 return this.getLatestResult();
             }
 
@@ -128,6 +129,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
             }
         }
 
+        Log.d(DbnmBgSyncSvc.TAG, "doWork() COMPLETED");
         return finalResult;
     }
 
@@ -539,82 +541,78 @@ public class DbnmBgSyncSvc extends BackgroundService {
             String exceptionMessage = null;
             try {
                 Log.d(DbnmBgSyncSvc.TAG, "Table " + this.response.TableName + " records to process: " + this.response.Records.length());
-                ArrayList<String> sqlStatements = new ArrayList<String>();
-
-                for (int i = 0; i < this.response.Records.length(); i++) {
-                    JSONObject newRecordData = this.response.Records.getJSONObject(i);
-
-                    if (newRecordData.has("_isDeleted") && newRecordData.getBoolean("_isDeleted")) {
-                        String sql = "delete from " + this.response.TableName + " where id = '" + newRecordData.getString("id") + "';";
-                        sqlStatements.add(sql);
-                        continue;
-                    }
-
-                    Iterator fieldNames = newRecordData.keys();
-                    StringBuilder fieldNamesStringBuilder = new StringBuilder();
-                    StringBuilder fieldValuesStringBuilder = new StringBuilder();
-                    String idValue = "";
-                    while (fieldNames.hasNext()) {
-                        String fieldName = (String) fieldNames.next();
-
-                        if (fieldNamesStringBuilder.length() != 0)
-                            fieldNamesStringBuilder.append(",");
-                        fieldNamesStringBuilder.append(fieldName);
-
-                        if (fieldValuesStringBuilder.length() != 0)
-                            fieldValuesStringBuilder.append(",");
-
-                        Object fieldValue;
-                        if (newRecordData.isNull(fieldName))
-                            fieldValue = null;
-                        else
-                            fieldValue = newRecordData.get(fieldName);
-
-                        if (fieldName.equals("id")) {
-                            if (fieldValue instanceof String)
-                                idValue = "'" + fieldValue + "'";
-                            else if (fieldValue != null)
-                                idValue = fieldValue.toString();
-                        }
-
-                        if (fieldValue == null) {
-                            fieldValuesStringBuilder.append("null");
-                        } else if (fieldValue instanceof String) {
-                            fieldValuesStringBuilder.append("'").append(fieldValue).append("'");
-                        } else if (fieldValue instanceof Boolean) {
-                            fieldValuesStringBuilder.append((Boolean) fieldValue ? 1 : 0);
-                        } else if (fieldValue instanceof Double) {
-                            fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
-                        } else if (fieldValue instanceof Float) {
-                            fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
-                        } else if (fieldValue instanceof Integer) {
-                            fieldValuesStringBuilder.append(fieldValue);
-                        }
-//                            if (fieldValue != null)
-//                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is of type " + fieldValue.getClass().getCanonicalName());
-//                            else
-//                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is null");
-                    }
-
-                    if (this.response.TableName.equals("UserProfile")) {
-                        fieldNamesStringBuilder.append(",userName,pwd,realPwd");
-                        fieldValuesStringBuilder
-                                .append(",(select userName from UserProfile where id=").append(idValue).append(")")
-                                .append(",(select pwd from UserProfile where id=").append(idValue).append(")")
-                                .append(",(select realPwd from UserProfile where id=").append(idValue).append(")");
-                    }
-
-                    String sqlInertOrReplace = "insert or replace into " + this.response.TableName + " (" + fieldNamesStringBuilder.toString() + ") values (" + fieldValuesStringBuilder.toString() + ");";
-//                    Log.d(DbnmBgSyncSvc.TAG, sqlInertOrReplace);
-                    sqlStatements.add(sqlInertOrReplace);
-                }
 
                 this.db.beginTransactionNonExclusive();
                 try {
                     Log.d(DbnmBgSyncSvc.TAG, "Transaction started for table " + this.response.TableName);
 
-                    for (String sql : sqlStatements) {
-                        this.db.execSQL(sql);
+                    for (int i = 0; i < this.response.Records.length(); i++) {
+                        JSONObject newRecordData = this.response.Records.getJSONObject(i);
+
+                        if (newRecordData.has("_isDeleted") && newRecordData.getBoolean("_isDeleted")) {
+                            String sql = "delete from " + this.response.TableName + " where id = '" + newRecordData.getString("id") + "';";
+                            this.db.execSQL(sql);
+                            processedRecordsCount++;
+                            continue;
+                        }
+
+                        Iterator fieldNames = newRecordData.keys();
+                        StringBuilder fieldNamesStringBuilder = new StringBuilder();
+                        StringBuilder fieldValuesStringBuilder = new StringBuilder();
+                        String idValue = "";
+                        while (fieldNames.hasNext()) {
+                            String fieldName = (String) fieldNames.next();
+
+                            if (fieldNamesStringBuilder.length() != 0)
+                                fieldNamesStringBuilder.append(",");
+                            fieldNamesStringBuilder.append(fieldName);
+
+                            if (fieldValuesStringBuilder.length() != 0)
+                                fieldValuesStringBuilder.append(",");
+
+                            Object fieldValue;
+                            if (newRecordData.isNull(fieldName))
+                                fieldValue = null;
+                            else
+                                fieldValue = newRecordData.get(fieldName);
+
+                            if (fieldName.equals("id")) {
+                                if (fieldValue instanceof String)
+                                    idValue = "'" + fieldValue + "'";
+                                else if (fieldValue != null)
+                                    idValue = fieldValue.toString();
+                            }
+
+                            if (fieldValue == null) {
+                                fieldValuesStringBuilder.append("null");
+                            } else if (fieldValue instanceof String) {
+                                fieldValuesStringBuilder.append("'").append(((String) fieldValue).replaceAll("'", "''")).append("'");
+                            } else if (fieldValue instanceof Boolean) {
+                                fieldValuesStringBuilder.append((Boolean) fieldValue ? 1 : 0);
+                            } else if (fieldValue instanceof Double) {
+                                fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
+                            } else if (fieldValue instanceof Float) {
+                                fieldValuesStringBuilder.append(DbnmBgSyncSvc.DecimalFormatter.format(fieldValue));
+                            } else if (fieldValue instanceof Integer) {
+                                fieldValuesStringBuilder.append(fieldValue);
+                            }
+//                            if (fieldValue != null)
+//                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is of type " + fieldValue.getClass().getCanonicalName());
+//                            else
+//                                Log.d(DbnmBgSyncSvc.TAG, "Field " + fieldName + " is null");
+                        }
+
+                        if (this.response.TableName.equals("UserProfile")) {
+                            fieldNamesStringBuilder.append(",userName,pwd,realPwd");
+                            fieldValuesStringBuilder
+                                    .append(",(select userName from UserProfile where id=").append(idValue).append(")")
+                                    .append(",(select pwd from UserProfile where id=").append(idValue).append(")")
+                                    .append(",(select realPwd from UserProfile where id=").append(idValue).append(")");
+                        }
+
+                        String sqlInertOrReplace = "insert or replace into " + this.response.TableName + " (" + fieldNamesStringBuilder.toString() + ") values (" + fieldValuesStringBuilder.toString() + ");";
+//                    Log.d(DbnmBgSyncSvc.TAG, sqlInertOrReplace);
+                        this.db.execSQL(sqlInertOrReplace);
                         processedRecordsCount++;
                     }
 
