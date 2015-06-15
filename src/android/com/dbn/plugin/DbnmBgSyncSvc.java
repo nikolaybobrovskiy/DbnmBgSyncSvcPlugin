@@ -127,6 +127,12 @@ public class DbnmBgSyncSvc extends BackgroundService {
             synchronized (this.isDoingWorkLock) {
                 this.isDoingWork = false;
             }
+
+            try {
+                finalResult.put("done", true);
+            } catch (JSONException e) {
+                Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
+            }
         }
 
         Log.d(DbnmBgSyncSvc.TAG, "doWork() COMPLETED");
