@@ -34,6 +34,9 @@ public class DbnmBgSyncSvc extends BackgroundService {
     private String directApiAuth;
     private String appVersion;
     private String lang;
+    private String clientAliveTimeStamp;
+    private long pauseDuration;
+    //    private boolean runOnce;
     private final static DecimalFormat DecimalFormatter = new DecimalFormat();
 
     static {
@@ -57,6 +60,11 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
         JSONObject currentResult = new JSONObject();
         JSONObject finalResult = new JSONObject();
+
+//        if (!this.runOnce)
+//            return finalResult;
+//        this.runOnce = false;
+
         final Object finalResultLock = new Object();
 
         try {
@@ -149,6 +157,8 @@ public class DbnmBgSyncSvc extends BackgroundService {
             result.put("directApiAuth", this.directApiAuth);
             result.put("appVersion", this.appVersion);
             result.put("lang", this.lang);
+            result.put("clientAliveTimeStamp", this.clientAliveTimeStamp);
+            result.put("pauseDuration", this.pauseDuration);
         } catch (JSONException e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
@@ -164,6 +174,16 @@ public class DbnmBgSyncSvc extends BackgroundService {
             if (config.has("directApiAuth")) this.directApiAuth = config.getString("directApiAuth");
             if (config.has("appVersion")) this.appVersion = config.getString("appVersion");
             if (config.has("lang")) this.lang = config.getString("lang");
+//            if (config.has("runOnce")) this.runOnce = config.getBoolean("runOnce");
+            if (config.has("pauseDuration")) this.pauseDuration = config.getLong("pauseDuration");
+            if (config.has("resetResult") && config.getBoolean("resetResult")) {
+                this.setLatestResult(new JSONObject());
+            }
+            if (config.has("clientAliveTimeStamp")) {
+                this.clientAliveTimeStamp = config.getString("clientAliveTimeStamp");
+                Log.d(DbnmBgSyncSvc.TAG, "Pause duration set to " + this.pauseDuration);
+                this.setPauseDuration(this.pauseDuration);
+            }
         } catch (JSONException e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
