@@ -2,6 +2,8 @@ package com.dbn.plugin;
 
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.util.JsonReader;
+import android.util.JsonToken;
 import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -9,17 +11,13 @@ import org.json.JSONObject;
 
 import com.red_folder.phonegap.plugin.backgroundservice.BackgroundService;
 
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -31,11 +29,11 @@ public class DbnmBgSyncSvc extends BackgroundService {
     private final static String TAG = com.dbn.plugin.DbnmBgSyncSvc.class.getSimpleName();
     private boolean isDoingWork = false;
     private final Object isDoingWorkLock = new Object();
-    private String dbPath = "/data/data/com.dbn.DbnmKfsTest/databases/dbnm-common.db";
-    private String directApiUrl = "http://192.168.100.100:54593/rpc";
-    private String directApiAuth = "YmE=Bf-#1NjMxNQ==";
-    private String appVersion = "1.5.12";
-    private String lang = "en";
+    private String dbPath;
+    private String directApiUrl;
+    private String directApiAuth;
+    private String appVersion;
+    private String lang;
     private final static DecimalFormat DecimalFormatter = new DecimalFormat();
 
     static {
@@ -75,11 +73,14 @@ public class DbnmBgSyncSvc extends BackgroundService {
                     Log.d(DbnmBgSyncSvc.TAG, "Start processing of " + incomingUpdatesRequests.size() + " request(s)");
                     JSONObject directApiCallResponse = this.invokeDirectApiCall(this.createDirectApiSyncRequest(incomingUpdatesRequests, outgoingUpdatesRequests));
 
+                    Log.d(DbnmBgSyncSvc.TAG, "Extracting incoming updates responses...");
                     ArrayList<IncomingUpdatesResponse> incomingUpdatesResponses = this.getIncomingUpdatesResponsesFromDirectApiSyncResponse(incomingUpdatesRequests, directApiCallResponse);
                     incomingUpdatesRequests.clear();
 
+                    Log.d(DbnmBgSyncSvc.TAG, "Extracting outgoing updates responses...");
                     JSONArray outgoingUpdatesResponses = this.getOutgoingUpdatesResponsesFromDirectApiSyncResponse(directApiCallResponse);
 
+                    Log.d(DbnmBgSyncSvc.TAG, "Extracting errors...");
                     JSONArray errors = this.getErrorsFromDirectApiSyncResponse(directApiCallResponse);
                     if (errors.length() > 0) {
                         StringBuilder exceptionMessageBuilder = new StringBuilder();
@@ -158,7 +159,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
         } catch (JSONException e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
-
     }
 
     @Override
@@ -197,14 +197,96 @@ public class DbnmBgSyncSvc extends BackgroundService {
             osw.flush();
             osw.close();
 
-            //int statusCode = conn.getResponseCode();
+            int statusCode = conn.getResponseCode();
+            Log.d(DbnmBgSyncSvc.TAG, "Direct API responed with code " + statusCode);
             InputStream is = new BufferedInputStream(conn.getInputStream());
-            return new JSONObject(new Scanner(is).useDelimiter("\\A").next());
+            Log.d(DbnmBgSyncSvc.TAG, "Parsing Direct API response...");
+            JSONObject result = new JSONObject();
+
+//            JSONObject result = new JSONObject(new Scanner(is).useDelimiter("\\A").next());
+
+//            Log.d(DbnmBgSyncSvc.TAG, "   ...building JSON string...");
+//            BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"));
+//            StringBuilder builder = new StringBuilder();
+//            for (String line; (line = reader.readLine()) != null; ) {
+//                builder.append(line).append("\n");
+//            }
+//            Log.d(DbnmBgSyncSvc.TAG, "   ...creating tokener...");
+//            JSONTokener tokener = new JSONTokener(builder.toString());
+//            Log.d(DbnmBgSyncSvc.TAG, "   ...creating JSON object...");
+//            JSONObject result = new JSONObject(tokener);
+
+            JsonReader reader = new JsonReader(new InputStreamReader(is, "UTF-8"));
+            try {
+                readJsonObject(reader, result);
+            } finally {
+                reader.close();
+            }
+
+            Log.d(DbnmBgSyncSvc.TAG, "Direct API response parsing finished.");
+            return result;
         } finally {
             Log.d(DbnmBgSyncSvc.TAG, "Direct API call finished");
             if (conn != null)
                 conn.disconnect();
         }
+    }
+
+    private static void readJsonObject(JsonReader reader, JSONObject obj) throws IOException, JSONException {
+        reader.beginObject();
+
+        while (reader.hasNext()) {
+            String name = reader.nextName();
+            JsonToken curr = reader.peek();
+            if (curr == JsonToken.NULL) {
+                obj.put(name, null);
+                reader.skipValue();
+            } else if (curr == JsonToken.BOOLEAN) {
+                obj.put(name, reader.nextBoolean());
+            } else if (curr == JsonToken.NUMBER) {
+                obj.put(name, reader.nextDouble());
+            } else if (curr == JsonToken.STRING) {
+                obj.put(name, reader.nextString());
+            } else if (curr == JsonToken.BEGIN_OBJECT) {
+                JSONObject childObj = new JSONObject();
+                obj.put(name, childObj);
+                readJsonObject(reader, childObj);
+            } else if (curr == JsonToken.BEGIN_ARRAY) {
+                JSONArray childArr = new JSONArray();
+                obj.put(name, childArr);
+                readJsonArray(reader, childArr);
+            }
+        }
+
+        reader.endObject();
+    }
+
+    private static void readJsonArray(JsonReader reader, JSONArray arr) throws IOException, JSONException {
+        reader.beginArray();
+
+        while (reader.hasNext()) {
+            JsonToken curr = reader.peek();
+            if (curr == JsonToken.NULL) {
+                arr.put(null);
+                reader.skipValue();
+            } else if (curr == JsonToken.BOOLEAN) {
+                arr.put(reader.nextBoolean());
+            } else if (curr == JsonToken.NUMBER) {
+                arr.put(reader.nextDouble());
+            } else if (curr == JsonToken.STRING) {
+                arr.put(curr.name());
+            } else if (curr == JsonToken.BEGIN_OBJECT) {
+                JSONObject childObj = new JSONObject();
+                arr.put(childObj);
+                readJsonObject(reader, childObj);
+            } else if (curr == JsonToken.BEGIN_ARRAY) {
+                JSONArray childArr = new JSONArray();
+                arr.put(childArr);
+                readJsonArray(reader, childArr);
+            }
+        }
+
+        reader.endArray();
     }
 
     private ArrayList<IncomingUpdatesRequest> generateIncomingUpdatesRequests(SQLiteDatabase db) {
