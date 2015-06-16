@@ -1,7 +1,9 @@
 package com.dbn.plugin;
 
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.preference.PreferenceManager;
 import android.util.JsonReader;
 import android.util.JsonToken;
 import android.util.Log;
@@ -29,12 +31,10 @@ public class DbnmBgSyncSvc extends BackgroundService {
     private final static String TAG = com.dbn.plugin.DbnmBgSyncSvc.class.getSimpleName();
     private boolean isDoingWork = false;
     private final Object isDoingWorkLock = new Object();
-    private String dbPath;
     private String directApiUrl;
     private String directApiAuth;
     private String appVersion;
     private String lang;
-    private String clientAliveTimeStamp;
     private long pauseDuration;
     //    private boolean runOnce;
     private final static DecimalFormat DecimalFormatter = new DecimalFormat();
@@ -61,10 +61,6 @@ public class DbnmBgSyncSvc extends BackgroundService {
         JSONObject currentResult = new JSONObject();
         JSONObject finalResult = new JSONObject();
 
-//        if (!this.runOnce)
-//            return finalResult;
-//        this.runOnce = false;
-
         final Object finalResultLock = new Object();
 
         try {
@@ -72,7 +68,9 @@ public class DbnmBgSyncSvc extends BackgroundService {
             currentResult.put("progress", 0);
             this.setLatestResult(currentResult);
 
-            SQLiteDatabase db = SQLiteDatabase.openDatabase(this.dbPath, null, SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING);
+            String dbPath = this.getDatabasePath("dbnm-common").getAbsolutePath() + ".db";
+            Log.d(DbnmBgSyncSvc.TAG, "Open database: " + dbPath);
+            SQLiteDatabase db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING);
             try {
                 ArrayList<IncomingUpdatesRequest> incomingUpdatesRequests = this.generateIncomingUpdatesRequests(db);
                 JSONArray outgoingUpdatesRequests = this.generateOutgoingUpdatesRequests(db);
@@ -152,12 +150,10 @@ public class DbnmBgSyncSvc extends BackgroundService {
         JSONObject result = new JSONObject();
 
         try {
-            result.put("dbPath", this.dbPath);
             result.put("directApiUrl", this.directApiUrl);
             result.put("directApiAuth", this.directApiAuth);
             result.put("appVersion", this.appVersion);
             result.put("lang", this.lang);
-            result.put("clientAliveTimeStamp", this.clientAliveTimeStamp);
             result.put("pauseDuration", this.pauseDuration);
         } catch (JSONException e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
@@ -169,21 +165,25 @@ public class DbnmBgSyncSvc extends BackgroundService {
     @Override
     protected void setConfig(JSONObject config) {
         try {
-            if (config.has("dbPath")) this.dbPath = config.getString("dbPath");
+            SharedPreferences.Editor prefsEditor = PreferenceManager.getDefaultSharedPreferences(this).edit();
             if (config.has("directApiUrl")) this.directApiUrl = config.getString("directApiUrl");
             if (config.has("directApiAuth")) this.directApiAuth = config.getString("directApiAuth");
             if (config.has("appVersion")) this.appVersion = config.getString("appVersion");
             if (config.has("lang")) this.lang = config.getString("lang");
-//            if (config.has("runOnce")) this.runOnce = config.getBoolean("runOnce");
             if (config.has("pauseDuration")) this.pauseDuration = config.getLong("pauseDuration");
             if (config.has("resetResult") && config.getBoolean("resetResult")) {
                 this.setLatestResult(new JSONObject());
             }
             if (config.has("clientAliveTimeStamp")) {
-                this.clientAliveTimeStamp = config.getString("clientAliveTimeStamp");
                 Log.d(DbnmBgSyncSvc.TAG, "Pause duration set to " + this.pauseDuration);
                 this.setPauseDuration(this.pauseDuration);
             }
+
+            prefsEditor.putString(this.getClass().getName() + ".directApiUrl", this.directApiUrl);
+            prefsEditor.putString(this.getClass().getName() + ".directApiAuth", this.directApiAuth);
+            prefsEditor.putString(this.getClass().getName() + ".appVersion", this.appVersion);
+            prefsEditor.putString(this.getClass().getName() + ".lang", this.lang);
+            prefsEditor.commit();
         } catch (JSONException e) {
             Log.e(DbnmBgSyncSvc.TAG, e.getMessage(), e);
         }
@@ -191,6 +191,15 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
     @Override
     protected JSONObject initialiseLatestResult() {
+        Log.d(DbnmBgSyncSvc.TAG, "initialiseLatestResult()");
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+        this.directApiUrl = prefs.getString(this.getClass().getName() + ".directApiUrl", "");
+        this.directApiUrl = prefs.getString(this.getClass().getName() + ".directApiAuth", "");
+        this.appVersion = prefs.getString(this.getClass().getName() + ".appVersion", "");
+        this.lang = prefs.getString(this.getClass().getName() + ".lang", "");
+
         return null;
     }
 
