@@ -196,7 +196,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
         this.directApiUrl = prefs.getString(this.getClass().getName() + ".directApiUrl", "");
-        this.directApiUrl = prefs.getString(this.getClass().getName() + ".directApiAuth", "");
+        this.directApiAuth = prefs.getString(this.getClass().getName() + ".directApiAuth", "");
         this.appVersion = prefs.getString(this.getClass().getName() + ".appVersion", "");
         this.lang = prefs.getString(this.getClass().getName() + ".lang", "");
 
