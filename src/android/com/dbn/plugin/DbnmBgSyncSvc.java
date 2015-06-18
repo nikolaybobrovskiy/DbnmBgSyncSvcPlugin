@@ -73,12 +73,14 @@ public class DbnmBgSyncSvc extends BackgroundService {
             SQLiteDatabase db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING);
             try {
                 ArrayList<IncomingUpdatesRequest> incomingUpdatesRequests = this.generateIncomingUpdatesRequests(db);
-                JSONArray outgoingUpdatesRequests = this.generateOutgoingUpdatesRequests(db);
                 final Object incomingUpdatesRequestsLock = new Object();
 
                 while (!incomingUpdatesRequests.isEmpty()) {
+                    JSONArray outgoingUpdatesRequests = this.generateOutgoingUpdatesRequests(db);
                     Log.d(DbnmBgSyncSvc.TAG, "Start processing of " + incomingUpdatesRequests.size() + " request(s)");
                     JSONObject directApiCallResponse = this.invokeDirectApiCall(this.createDirectApiSyncRequest(incomingUpdatesRequests, outgoingUpdatesRequests));
+                    //noinspection UnusedAssignment
+                    outgoingUpdatesRequests = null;
 
                     Log.d(DbnmBgSyncSvc.TAG, "Extracting incoming updates responses...");
                     ArrayList<IncomingUpdatesResponse> incomingUpdatesResponses = this.getIncomingUpdatesResponsesFromDirectApiSyncResponse(incomingUpdatesRequests, directApiCallResponse);
@@ -89,6 +91,10 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
                     Log.d(DbnmBgSyncSvc.TAG, "Extracting errors...");
                     JSONArray errors = this.getErrorsFromDirectApiSyncResponse(directApiCallResponse);
+
+                    //noinspection UnusedAssignment
+                    directApiCallResponse = null;
+
                     if (errors.length() > 0) {
                         StringBuilder exceptionMessageBuilder = new StringBuilder();
                         for (int i = 0; i < errors.length(); i++) {
@@ -416,6 +422,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
         if (!response.has("result")) return result;
         if (!response.getJSONObject("result").has("syncResults")) return result;
         JSONArray syncResults = response.getJSONObject("result").getJSONArray("syncResults");
+
         for (int i = 0; i < syncResults.length(); i++) {
             JSONObject syncResult = syncResults.getJSONObject(i);
             int requestId = syncResult.getInt("index");
@@ -427,8 +434,14 @@ public class DbnmBgSyncSvc extends BackgroundService {
             incomingUpdatesResponse.LastSyncTimeStamp = syncResult.getDouble("lastSyncTimeStamp");
             incomingUpdatesResponse.NextRecordsSelectionStart = syncResult.getInt("nextRequestStart");
             incomingUpdatesResponse.Records = syncResult.getJSONArray("records");
+            syncResult.put("records", new JSONArray());
             result.add(incomingUpdatesResponse);
         }
+
+        response.getJSONObject("result").put("syncResults", new JSONArray());
+        //noinspection StatementWithEmptyBody
+        while (syncResults.remove(0) != null) ;
+
         return result;
     }
 
@@ -572,6 +585,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
         @Override
         public void run() {
             int processedRecordsCount = 0;
+            int recordsToProcessCount = this.response.Records.length();
             Boolean exception = false;
             String exceptionMessage = null;
             try {
@@ -651,6 +665,10 @@ public class DbnmBgSyncSvc extends BackgroundService {
                         processedRecordsCount++;
                     }
 
+                    //noinspection StatementWithEmptyBody
+                    while (this.response.Records.remove(0) != null) ;
+                    this.response.Records = null;
+
                     if (this.response.NextRecordsSelectionStart > 0) {
                         synchronized (this.incomingUpdatesRequestsLock) {
                             IncomingUpdatesRequest newRequest = new IncomingUpdatesRequest();
@@ -690,7 +708,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
                     }
                     processingResult.put("requestId", this.response.RequestId);
                     processingResult.put("newLastSyncTimeStamp", this.response.LastSyncTimeStamp);
-                    processingResult.put("recordsToProcessCount", previouslyRecordsToProcessCount + this.response.Records.length());
+                    processingResult.put("recordsToProcessCount", previouslyRecordsToProcessCount + recordsToProcessCount);
                     processingResult.put("processedRecordsCount", processedRecordsCount + previouslyProcessedRecordsCount);
                     processingResult.put("exception", exception);
                     processingResult.put("exceptionMessage", exceptionMessage);
