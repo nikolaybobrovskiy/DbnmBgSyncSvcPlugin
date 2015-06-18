@@ -311,7 +311,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
             } else if (curr == JsonToken.NUMBER) {
                 arr.put(reader.nextDouble());
             } else if (curr == JsonToken.STRING) {
-                arr.put(curr.name());
+                arr.put(reader.nextString());
             } else if (curr == JsonToken.BEGIN_OBJECT) {
                 JSONObject childObj = new JSONObject();
                 arr.put(childObj);
