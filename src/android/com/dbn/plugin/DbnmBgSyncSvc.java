@@ -407,6 +407,7 @@ public class DbnmBgSyncSvc extends BackgroundService {
 
         methodParams.put("requests", requests);
         methodParams.put("sync", outgoingUpdatesRequests);
+        methodParams.put("device", "MobileDevice");
         data.put(methodParams);
         directApiRequest.put("action", "DirectApi");
         directApiRequest.put("method", "syncTables");
