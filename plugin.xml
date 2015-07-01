@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?><plugin xmlns="http://www.phonegap.com/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android"
     id="com.dbn.plugin.dbnmBgSyncSvc"
-    version="1.0.3">
+    version="1.0.4">
 
     <name>DbnmBgSyncSvc</name>
     <description>DbnmBgSyncSvc.</description>
@@ -11,7 +11,7 @@
         <engine name="cordova" version=">=3.0.0" />
     </engines>
 
-    <dependency id="com.red_folder.phonegap.plugin.backgroundservice" url="https://github.com/Red-Folder/bgs-core.git"/>
+    <dependency id="com.dbn.phonegap.plugin.backgroundservice" url="https://github.com/nikolaybobrovskiy/bgs-core.git"/>
 
     <!-- android -->
     <platform name="android">
